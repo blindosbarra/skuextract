@@ -95,12 +95,13 @@ def getSkus(productId,apikey):
 def callUrl(pathtocall):
     try:
       response = urllib.request.urlopen(pathtocall)
+      str_response = response.read().decode('utf-8')
+      return str_response
     except urllib.error.HTTPError:
       print ("Error from sderver")
     except urllib.error.URLError:
       print ("Error reading URL")
-    str_response = response.read().decode('utf-8')
-    return str_response
+    return ""
 
 def unicodify(stringToUnicodify):
   return stringToUnicodify.encode('utf-8')
