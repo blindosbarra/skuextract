@@ -104,7 +104,11 @@ def callUrl(pathtocall):
     return ""
 
 def unicodify(stringToUnicodify):
-  return stringToUnicodify.encode('utf-8')
+  encoded_list = []
+  for item in stringToUnicodify:
+    encoded_item = item.encode("utf-8")
+    encoded_list.append(encoded_item)
+  return encoded_list
 
 if __name__== "__main__":
     print ("Running Billing estimations")
