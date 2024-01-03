@@ -4,11 +4,10 @@ import json
 import csv
 import urllib.request
 
-# add api version
 basepath = "https://cloudbilling.googleapis.com/v1/"
 servicespath = "services"
 pricepath = "services"
-requiredLocations = ['global', 'europe-west1', 'europe-west1' , 'europe-west3' , 'europe-north1']
+requiredLocations = ['global', 'europe-west8']
 filename_skulist = "skus_list.csv" 
 filename_services = "services_skus.csv"
 
@@ -30,22 +29,25 @@ def writeServicesToCsv(data,key):
     filename = "skus_list" 
     with open(filename_skulist, mode='w') as skulist_file:
       skulist_writer = csv.writer(skulist_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-      skulist_writer.writerow([ "skuId", "name", "description" , "serviceProviderName" , "region", "serviceDisplayName", "resourceFamily","resourceGroup","usageType","effectiveTime","summary","currencyConversionRate","displayQuantity","usageUnit","usageUnitDescription","aggregationLevel","aggregationInterval","aggregationCount","startUsageAmount","currencyCode","units","nanos"])        
+      skulist_writer.writerow([ "skuId", "name", "description" , "serviceProviderName" , "region", "serviceDisplayName", "resourceFamily","resourceGroup","usageType","effectiveTime","summary","currencyConversionRate","displayQuantity","usageUnit","baseUnit","baseUnitDescription","baseUnitConversionFactor","usageUnitDescription","aggregationLevel","aggregationInterval","aggregationCount","startUsageAmount","currencyCode","units","nanos","geoType","geoRegions"])        
       # for each service found we query the corresponding queue list
       for service in data['services']:
         servicesku_writer.writerow([ service['serviceId'],service['displayName'] ])
-        costpayload = getSkus(service['serviceId'], key)
-        unpackSku(service['serviceId'],costpayload,skulist_writer)
-          
+        processSKU(service['serviceId'],key,skulist_writer,"")
+
+def processSKU(service,key,skulist_writer,nextPageToken):
+    costpayload = getSkus(service, key,nextPageToken)
+    nextPageToken = unpackSku(service,costpayload,skulist_writer)
+    if (nextPageToken != ""):
+        print ("########### TOKEN "+nextPageToken)
+        print ("processing next page!!!!")
+        processSKU(service,key,skulist_writer,nextPageToken)
+
 def unpackSku(serviceid,payload,skulist_writer):
+    npt = payload["nextPageToken"]
     for skus in payload['skus']:
-      region_string=""
-      is_global_or_eu= False
-      if any(location in skus['serviceRegions'] for location in requiredLocations): 
-        is_global_or_eu = True
-        if (skus["serviceProviderName"] .find("Google") == -1):
-        # quick fix to avoid recording Skus that do not belong to Google
-          is_global_or_eu= False
+      if any(location in skus['serviceRegions'] for location in requiredLocations):
+        is_global_or_eu= True
         if (is_global_or_eu):
         # print only global or european services
           skuid=skus["skuId"]
@@ -57,6 +59,16 @@ def unpackSku(serviceid,payload,skulist_writer):
           resourceFamily=skus["category"]["resourceFamily"]
           resourceGroup=skus["category"]["resourceGroup"]
           usageType=skus["category"]["usageType"]
+          try:
+            gtType=skus["geoTaxonomy"]["type"]
+            gtRegions=skus["geoTaxonomy"]["regions"]
+          except:
+            print("Key Not Found!")
+            print(skus["serviceProviderName"])
+            print(skus["description"])
+            print(skus["name"])
+            gtType=""
+            gtRegions=""
           for pricinginfo in skus['pricingInfo']:
             effectiveTime=pricinginfo["effectiveTime"]
             summary=pricinginfo["summary"]
@@ -65,6 +77,9 @@ def unpackSku(serviceid,payload,skulist_writer):
             displayQuantity=str(pricingExpression["displayQuantity"])
             usageUnit=pricingExpression["usageUnit"]
             usageUnitDescription=pricingExpression["usageUnitDescription"]
+            baseUnit = pricingExpression["baseUnit"]
+            baseUnitDescription=pricingExpression["baseUnitDescription"]
+            baseUnitConversionFactor=pricingExpression["baseUnitConversionFactor"]
             aggregationLevel=""
             aggregationInterval=""
             aggregationCount=""
@@ -79,15 +94,19 @@ def unpackSku(serviceid,payload,skulist_writer):
               units = str(tieredRates["unitPrice"]["units"])
               nanos = str(tieredRates["unitPrice"]["nanos"])
               try:
-                skulist_writer.writerow([unicodify(skuid),unicodify(name),unicodify(description),unicodify(serviceProviderName),unicodify(regions),unicodify(serviceDisplayName),unicodify(resourceFamily),unicodify(resourceGroup),unicodify(usageType),unicodify(effectiveTime),unicodify(summary),unicodify(currencyConversionRate),unicodify(displayQuantity),(usageUnit),unicodify(usageUnitDescription),unicodify(aggregationLevel),unicodify(aggregationInterval),unicodify(aggregationCount),unicodify(startUsageAmount),unicodify(currencyCode),unicodify(units),unicodify(nanos)])
+                skulist_writer.writerow([unicodify(skuid),unicodify(name),unicodify(description),unicodify(serviceProviderName),unicodify(regions),unicodify(serviceDisplayName),unicodify(resourceFamily),unicodify(resourceGroup),unicodify(usageType),unicodify(effectiveTime),unicodify(summary),unicodify(currencyConversionRate),unicodify(displayQuantity),usageUnit,baseUnit,unicodify(baseUnitDescription),baseUnitConversionFactor,unicodify(usageUnitDescription),unicodify(aggregationLevel),unicodify(aggregationInterval),unicodify(aggregationCount),unicodify(startUsageAmount),unicodify(currencyCode),unicodify(units),unicodify(nanos),unicodify(gtType),unicodify(gtRegions)])
               except UnicodeEncodeError:
                 print("Exception Unicode")
                 print(skuid+ " VAR " +name+ " VAR " +description+ " VAR " +serviceProviderName+ " VAR " +regions+ " VAR " +serviceDisplayName+ " VAR " +resourceFamily+ " VAR " +resourceGroup+ " VAR " +usageType+ " VAR " +effectiveTime+ " VAR " +summary+ " VAR " +currencyConversionRate+ " VAR " +displayQuantity+ " VAR " +usageUnit+ " VAR " +usageUnitDescription+ " VAR " +aggregationLevel+ " VAR " +aggregationInterval+ " VAR " +aggregationCount+ " VAR " +currencyCode+ " VAR " +units+ " VAR " +nanos)
+    return npt 
 
-def getSkus(productId,apikey):
-    print('Obtaining pricing info about SKU '+productId)
-    URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey
-    print(URL)
+def getSkus(productId,apikey,nextPageToken):
+    #print('Obtaining pricing info about SKU '+productId)
+    if (nextPageToken == ""):
+        URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey 
+    else:
+        URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey +"&pageToken="+nextPageToken
+    #print(URL)
     payload = callUrl(URL)
     data = json.loads(payload)
     return data
@@ -104,11 +123,7 @@ def callUrl(pathtocall):
     return ""
 
 def unicodify(stringToUnicodify):
-  encoded_list = []
-  for item in stringToUnicodify:
-    encoded_item = item.encode("utf-8")
-    encoded_list.append(encoded_item)
-  return encoded_list
+  return stringToUnicodify
 
 if __name__== "__main__":
     print ("Running Billing estimations")
