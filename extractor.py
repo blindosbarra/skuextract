@@ -7,9 +7,10 @@ import urllib.request
 basepath = "https://cloudbilling.googleapis.com/v1/"
 servicespath = "services"
 pricepath = "services"
-requiredLocations = ['global', 'europe-west8']
-filename_skulist = "skus_list.csv" 
-filename_services = "services_skus.csv"
+requiredLocations = ['global','europe-west8', 'europe-west12']
+filename_skulist = "skus_list" 
+## quello sotto da analizzare
+filename_services = "services_skus"
 
 def main():
     parser = argparse.ArgumentParser()
@@ -18,16 +19,15 @@ def main():
     if (args.key == ""):
       print ("Error please provide a key with --key option")
     URL = basepath + servicespath + "?key=" + args.key
-    payload = callUrl(URL)
-    data = json.loads(payload)
-    writeServicesToCsv(data,args.key)
+    processList(URL,args.key,"",0)
 
-def writeServicesToCsv(data,key):
-  with open(filename_services, mode='w') as servicesku_file:
+
+def writeServicesToCsv(data,key,part):
+  with open(filename_services+".csv", mode='a+') as servicesku_file:
     servicesku_writer = csv.writer(servicesku_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     servicesku_writer.writerow([ 'serviceId','displayName' ])
     filename = "skus_list" 
-    with open(filename_skulist, mode='w') as skulist_file:
+    with open(filename_skulist+".csv", mode='a+') as skulist_file:
       skulist_writer = csv.writer(skulist_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
       skulist_writer.writerow([ "skuId", "name", "description" , "serviceProviderName" , "region", "serviceDisplayName", "resourceFamily","resourceGroup","usageType","effectiveTime","summary","currencyConversionRate","displayQuantity","usageUnit","baseUnit","baseUnitDescription","baseUnitConversionFactor","usageUnitDescription","aggregationLevel","aggregationInterval","aggregationCount","startUsageAmount","currencyCode","units","nanos","geoType","geoRegions"])        
       # for each service found we query the corresponding queue list
@@ -100,12 +100,30 @@ def unpackSku(serviceid,payload,skulist_writer):
                 print(skuid+ " VAR " +name+ " VAR " +description+ " VAR " +serviceProviderName+ " VAR " +regions+ " VAR " +serviceDisplayName+ " VAR " +resourceFamily+ " VAR " +resourceGroup+ " VAR " +usageType+ " VAR " +effectiveTime+ " VAR " +summary+ " VAR " +currencyConversionRate+ " VAR " +displayQuantity+ " VAR " +usageUnit+ " VAR " +usageUnitDescription+ " VAR " +aggregationLevel+ " VAR " +aggregationInterval+ " VAR " +aggregationCount+ " VAR " +currencyCode+ " VAR " +units+ " VAR " +nanos)
     return npt 
 
+def processList(URL,key,nextPageToken,part):
+    data = getSkusList(URL,nextPageToken)
+    writeServicesToCsv(data,key,part)
+    if (data['nextPageToken'] != ""):
+        print ("########### TOKEN "+data['nextPageToken'])
+        print ("processing next page!!!!")
+        part+=1
+        processList(URL,key,data['nextPageToken'],part)
+
+def getSkusList(URL,nextPageToken):
+    #print('Obtaining pricing info about SKU '+productId)
+    if (nextPageToken != ""):
+        URL = URL +"&pageToken="+nextPageToken
+    #print(URL)
+    payload = callUrl(URL)
+    data = json.loads(payload)
+    return data
+
 def getSkus(productId,apikey,nextPageToken):
     #print('Obtaining pricing info about SKU '+productId)
     if (nextPageToken == ""):
-        URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey 
+      URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey
     else:
-        URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey +"&pageToken="+nextPageToken
+      URL = basepath + pricepath + "/" + productId + "/skus?key=" + apikey +"&pageToken="+nextPageToken
     #print(URL)
     payload = callUrl(URL)
     data = json.loads(payload)
